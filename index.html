@@ -7,13 +7,13 @@
   <style>
     * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 20px;
       background-color: #f8f9fa;
       color: #333;
     }
     .container {
-      max-width: 950px;
+      max-width: 1050px;
       margin: auto;
       background: #ffffff;
       padding: 30px;
@@ -23,7 +23,7 @@
     h2, h3 { color: #2c3e50; margin-top: 0; }
     .capacity-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 12px;
       margin-bottom: 25px;
     }
@@ -47,9 +47,7 @@
       border-radius: 4px;
       font-size: 14px;
     }
-    .btn-group {
-      margin-bottom: 20px;
-    }
+    .btn-group { margin-bottom: 20px; }
     button {
       background-color: #28a745;
       color: white;
@@ -67,11 +65,11 @@
     .btn-export:hover { background-color: #0056b3; }
     #status {
       font-weight: bold;
-      margin-top: 15px;
-      margin-bottom: 15px;
-      padding: 10px;
+      margin: 15px 0;
+      padding: 12px;
       background-color: #e9ecef;
       border-radius: 4px;
+      border-left: 5px solid #007bff;
     }
     table {
       width: 100%;
@@ -80,13 +78,14 @@
     }
     th, td {
       border: 1px solid #dee2e6;
-      padding: 12px;
+      padding: 10px 12px;
       text-align: left;
     }
-    th {
-      background-color: #f1f3f5;
-      color: #333;
+    td.arabic-name {
+      direction: rtl;
+      text-align: right;
     }
+    th { background-color: #f1f3f5; color: #333; }
     tr:nth-child(even) { background-color: #f8f9fa; }
   </style>
 </head>
@@ -103,15 +102,15 @@
     <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export to CSV</button>
   </div>
 
-  <h3>2. Final Allocation Results</h3>
+  <h3>2. Allocation Results</h3>
   <div id="status">Click "Run GPA Allocation" to process student choices from Google Sheets.</div>
   
   <table id="resultsTable" style="display:none;">
     <thead>
       <tr>
         <th>Rank</th>
-        <th>Student ID</th>
-        <th>Name</th>
+        <th>ID</th>
+        <th style="text-align:right;">Student Name</th>
         <th>GPA</th>
         <th>Assigned Department</th>
         <th>Matched Choice</th>
@@ -122,7 +121,7 @@
 </div>
 
 <script>
-// Google Apps Script Web App URL
+// Web App Deployment URL
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyC0f5f1oVLCZeTUzp49ticE3yA0QiqDskrOY-knMLGIgVIf7tWEwxgtvnT__HDH-xfZA/exec';
 
 // The 8 Departments
@@ -139,10 +138,10 @@ const DEPARTMENTS = [
 
 let finalAllocation = [];
 
-// 1. Generate Capacity Inputs dynamically
+// Generate inputs for capacity configuration
 document.addEventListener('DOMContentLoaded', () => {
-  const capacityContainer = document.getElementById('capacityInputs');
-  capacityContainer.innerHTML = '';
+  const container = document.getElementById('capacityInputs');
+  container.innerHTML = '';
   
   DEPARTMENTS.forEach(dept => {
     const div = document.createElement('div');
@@ -151,42 +150,41 @@ document.addEventListener('DOMContentLoaded', () => {
       <label for="cap_${dept}">${dept}</label>
       <input type="number" id="cap_${dept}" value="30" min="1">
     `;
-    capacityContainer.appendChild(div);
+    container.appendChild(div);
   });
 });
 
-// 2. Fetch data from Google Sheets, Sort by GPA, and Allocate Seats
+// Fetch data, sort by GPA descending, and perform allocation
 async function runAllocation() {
   const status = document.getElementById('status');
   const resultsTable = document.getElementById('resultsTable');
   const exportBtn = document.getElementById('exportBtn');
   
-  status.textContent = 'Fetching student data from Google Sheets...';
+  status.textContent = 'Fetching submissions from Google Sheets...';
 
   try {
-    const response = await fetch(SCRIPT_URL);
-    if (!response.ok) throw new Error('Network response was not ok');
+    const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
     
     const data = await response.json();
     let students = data.students || [];
 
     if (students.length === 0) {
-      status.textContent = 'No student submissions found in the sheet.';
+      status.textContent = 'No submissions found in Google Sheets.';
       return;
     }
 
-    // Read capacity numbers configured by Admin
+    // Read capacity settings
     const seatsLeft = {};
     DEPARTMENTS.forEach(dept => {
       const inputEl = document.getElementById(`cap_${dept}`);
-      const cap = inputEl ? parseInt(inputEl.value, 10) || 0 : 0;
-      seatsLeft[dept] = cap;
+      seatsLeft[dept] = inputEl ? parseInt(inputEl.value, 10) || 0 : 0;
     });
 
-    // Sort students by GPA descending (Highest GPA gets top priority)
+    // Sort students by GPA descending
     students.sort((a, b) => b.gpa - a.gpa);
 
-    // Run Allocation Algorithm
+    // Run allocation algorithm
     finalAllocation = [];
     students.forEach((student, index) => {
       let assigned = 'Unassigned (Capacities Full)';
@@ -198,7 +196,7 @@ async function runAllocation() {
           if (seatsLeft[pref] !== undefined && seatsLeft[pref] > 0) {
             assigned = pref;
             choiceMatched = `Preference ${i + 1}`;
-            seatsLeft[pref]--; // Deduct 1 seat capacity
+            seatsLeft[pref]--;
             break;
           }
         }
@@ -214,7 +212,7 @@ async function runAllocation() {
       });
     });
 
-    // Populate Results Table
+    // Render table
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = '';
     
@@ -223,7 +221,7 @@ async function runAllocation() {
       tr.innerHTML = `
         <td>${s.rank}</td>
         <td>${s.id}</td>
-        <td>${s.name}</td>
+        <td class="arabic-name">${s.name}</td>
         <td>${typeof s.gpa === 'number' ? s.gpa.toFixed(2) : s.gpa}</td>
         <td><strong>${s.assigned}</strong></td>
         <td>${s.choiceMatched}</td>
@@ -233,25 +231,18 @@ async function runAllocation() {
 
     resultsTable.style.display = 'table';
     exportBtn.style.display = 'inline-block';
-    status.textContent = `Allocation complete! Successfully allocated ${students.length} students.`;
+    status.textContent = `Allocation complete! Successfully processed ${students.length} students.`;
 
   } catch (error) {
     console.error('Allocation Error:', error);
-    status.textContent = 'Error fetching data from Google Sheets. Ensure your Apps Script Web App is deployed as "Anyone".';
+    status.textContent = 'Error fetching data from Google Sheets. Open browser console (F12) for details.';
   }
 }
 
-// 3. Export Allocation to CSV
+// Export allocation results to CSV (UTF-8 BOM supported for Arabic text)
 function exportCSV() {
   if (finalAllocation.length === 0) return;
- 
-    <div class="btn-group">
-  <button id="runBtn" onclick="runAllocation()">Run GPA Allocation</button>
-  <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export to CSV</button>
-  <button id="saveSheetBtn" style="display:none; background-color: #6f42c1;" onclick="saveToSheet()">Save to Google Sheet</button>
-</div>
 
-  // UTF-8 BOM prefix ensures Arabic student names display correctly in Excel
   let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
   csvContent += "Rank,Student ID,Name,GPA,Assigned Department,Choice Matched\n";
 
@@ -263,7 +254,7 @@ function exportCSV() {
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement("a");
   link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "final_department_allocation.csv");
+  link.setAttribute("download", "department_allocation_results.csv");
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
