@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - Department Allocation Portal</title>
+  <title>Admin - Wave & Department Allocation Portal</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -13,40 +13,14 @@
       color: #333;
     }
     .container {
-      max-width: 1050px;
+      max-width: 1100px;
       margin: auto;
       background: #ffffff;
       padding: 30px;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-    h2, h3 { color: #2c3e50; margin-top: 0; }
-    .capacity-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px;
-      margin-bottom: 25px;
-    }
-    .capacity-item {
-      background: #eef2f5;
-      padding: 12px;
-      border-radius: 6px;
-      border: 1px solid #dcdfe3;
-    }
-    .capacity-item label {
-      font-size: 13px;
-      font-weight: bold;
-      display: block;
-      margin-bottom: 6px;
-      color: #495057;
-    }
-    .capacity-item input {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 14px;
-    }
+    h2, h3 { color: #2c3e50; margin-top: 25px; margin-bottom: 15px; }
     .btn-group { margin-bottom: 20px; }
     button {
       background-color: #28a745;
@@ -71,10 +45,13 @@
       border-radius: 4px;
       border-left: 5px solid #007bff;
     }
+    
+    /* Table Styling */
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 15px;
+      margin-top: 10px;
+      margin-bottom: 25px;
     }
     th, td {
       border: 1px solid #dee2e6;
@@ -85,82 +62,103 @@
       direction: rtl;
       text-align: right;
     }
-    th { background-color: #f1f3f5; color: #333; }
+    th { background-color: #f1f3f5; color: #333; font-size: 14px; }
     tr:nth-child(even) { background-color: #f8f9fa; }
+
+    /* Department Group Cards */
+    .dept-card {
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      margin-bottom: 25px;
+      overflow: hidden;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    .dept-header {
+      background-color: #2c3e50;
+      color: #ffffff;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .dept-header h4 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .badge {
+      background-color: #28a745;
+      color: #ffffff;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h2>Admin Department Allocation Portal</h2>
-  
-  <h3>1. Set Department Capacity Limits</h3>
-  <div class="capacity-grid" id="capacityInputs"></div>
+  <h2>Admin Wave & Department Allocation Portal</h2>
 
   <div class="btn-group">
-    <button id="runBtn" onclick="runAllocation()">Run GPA Allocation</button>
-    <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export to CSV</button>
+    <button id="runBtn" onclick="runAllocation()">Run Allocation Engine</button>
+    <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export All Results (CSV)</button>
   </div>
 
-  <h3>2. Allocation Results</h3>
-  <div id="status">Click "Run GPA Allocation" to process student choices from Google Sheets.</div>
-  
-  <table id="resultsTable" style="display:none;">
-    <thead>
-      <tr>
-        <th>Rank</th>
-        <th>ID</th>
-        <th style="text-align:right;">Student Name</th>
-        <th>GPA</th>
-        <th>Assigned Department</th>
-        <th>Matched Choice</th>
-      </tr>
-    </thead>
-    <tbody id="resultsBody"></tbody>
-  </table>
+  <div id="status">Click "Run Allocation Engine" to compute results based on Sheet data and wave capacities.</div>
+
+  <!-- SECTION 1: Capacity & Occupancy Overview -->
+  <div id="summarySection" style="display:none;">
+    <h3>1. Department Seat Summary (by Wave)</h3>
+    <table id="summaryTable">
+      <thead>
+        <tr>
+          <th>Wave</th>
+          <th>Department</th>
+          <th>Total Capacity</th>
+          <th>Assigned Students</th>
+          <th>Seats Remaining</th>
+        </tr>
+      </thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 2: Master Allocation Table -->
+  <div id="masterSection" style="display:none;">
+    <h3>2. Master Allocation List (Ranked by GPA)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Wave</th>
+          <th>Wave Rank</th>
+          <th>ID</th>
+          <th style="text-align:right;">Student Name</th>
+          <th>GPA</th>
+          <th>Assigned Department</th>
+          <th>Matched Choice</th>
+        </tr>
+      </thead>
+      <tbody id="masterBody"></tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 3: Grouped Lists by Department -->
+  <div id="departmentSection" style="display:none;">
+    <h3>3. Allocation Lists Grouped by Department</h3>
+    <div id="departmentCardsContainer"></div>
+  </div>
 </div>
 
 <script>
-// Web App Deployment URL
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyC0f5f1oVLCZeTUzp49ticE3yA0QiqDskrOY-knMLGIgVIf7tWEwxgtvnT__HDH-xfZA/exec';
-
-// The 8 Departments
-const DEPARTMENTS = [
-  "Medicinal chemistry",
-  "Pharmaceutics",
-  "Pharmacy practice",
-  "Microbiology",
-  "Pharmacognosy",
-  "Pharmacology",
-  "Biochemistry",
-  "Analytical chemistry"
-];
 
 let finalAllocation = [];
 
-// Generate inputs for capacity configuration
-document.addEventListener('DOMContentLoaded', () => {
-  const container = document.getElementById('capacityInputs');
-  container.innerHTML = '';
-  
-  DEPARTMENTS.forEach(dept => {
-    const div = document.createElement('div');
-    div.className = 'capacity-item';
-    div.innerHTML = `
-      <label for="cap_${dept}">${dept}</label>
-      <input type="number" id="cap_${dept}" value="30" min="1">
-    `;
-    container.appendChild(div);
-  });
-});
-
-// Fetch data, sort by GPA descending, and perform allocation
 async function runAllocation() {
   const status = document.getElementById('status');
-  const resultsTable = document.getElementById('resultsTable');
-  const exportBtn = document.getElementById('exportBtn');
   
-  status.textContent = 'Fetching submissions from Google Sheets...';
+  status.textContent = 'Fetching student data and wave capacities...';
 
   try {
     const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
@@ -168,93 +166,203 @@ async function runAllocation() {
     
     const data = await response.json();
     let students = data.students || [];
+    let sheetCapacities = data.capacities || {};
 
     if (students.length === 0) {
       status.textContent = 'No submissions found in Google Sheets.';
       return;
     }
 
-    // Read capacity settings
-    const seatsLeft = {};
-    DEPARTMENTS.forEach(dept => {
-      const inputEl = document.getElementById(`cap_${dept}`);
-      seatsLeft[dept] = inputEl ? parseInt(inputEl.value, 10) || 0 : 0;
+    // 1. Group students by Wave
+    const waveGroups = {};
+    students.forEach(s => {
+      const w = s.wave || '1';
+      if (!waveGroups[w]) waveGroups[w] = [];
+      waveGroups[w].push(s);
     });
 
-    // Sort students by GPA descending
-    students.sort((a, b) => b.gpa - a.gpa);
-
-    // Run allocation algorithm
     finalAllocation = [];
-    students.forEach((student, index) => {
-      let assigned = 'Unassigned (Capacities Full)';
-      let choiceMatched = 'None';
+    const capacityStats = []; // Tracks capacity vs assigned count
 
-      if (Array.isArray(student.preferences)) {
-        for (let i = 0; i < student.preferences.length; i++) {
-          const pref = student.preferences[i];
-          if (seatsLeft[pref] !== undefined && seatsLeft[pref] > 0) {
-            assigned = pref;
-            choiceMatched = `Preference ${i + 1}`;
-            seatsLeft[pref]--;
-            break;
+    // 2. Process allocation wave by wave
+    Object.keys(waveGroups).forEach(waveId => {
+      let waveStudents = waveGroups[waveId];
+      waveStudents.sort((a, b) => b.gpa - a.gpa); // Sort highest GPA first
+
+      // Deep copy capacities for this wave
+      let seatsLeft = sheetCapacities[waveId] ? JSON.parse(JSON.stringify(sheetCapacities[waveId])) : {};
+      let initialCapacities = sheetCapacities[waveId] ? JSON.parse(JSON.stringify(sheetCapacities[waveId])) : {};
+
+      waveStudents.forEach((student, index) => {
+        let assigned = 'Unassigned (Capacity Full)';
+        let choiceMatched = 'None';
+
+        if (Array.isArray(student.preferences)) {
+          for (let i = 0; i < student.preferences.length; i++) {
+            const pref = student.preferences[i];
+            
+            if (seatsLeft[pref] !== undefined && seatsLeft[pref] > 0) {
+              assigned = pref;
+              choiceMatched = `Preference ${i + 1}`;
+              seatsLeft[pref]--;
+              break;
+            } else if (seatsLeft[pref] === undefined) {
+              assigned = pref;
+              choiceMatched = `Preference ${i + 1}`;
+              break;
+            }
           }
         }
-      }
 
-      finalAllocation.push({
-        rank: index + 1,
-        id: student.id,
-        name: student.name,
-        gpa: student.gpa,
-        assigned: assigned,
-        choiceMatched: choiceMatched
+        finalAllocation.push({
+          wave: waveId,
+          waveRank: index + 1,
+          id: student.id,
+          name: student.name,
+          gpa: student.gpa,
+          assigned: assigned,
+          choiceMatched: choiceMatched
+        });
+      });
+
+      // Record Capacity Stats for this wave
+      Object.keys(initialCapacities).forEach(dept => {
+        const total = initialCapacities[dept];
+        const remaining = seatsLeft[dept] !== undefined ? seatsLeft[dept] : 0;
+        const assignedCount = total - remaining;
+        
+        capacityStats.push({
+          wave: waveId,
+          department: dept,
+          capacity: total,
+          assigned: assignedCount,
+          remaining: remaining
+        });
       });
     });
 
-    // Render table
-    const tbody = document.getElementById('resultsBody');
-    tbody.innerHTML = '';
-    
+    // 3. Render Section 1: Summary Table
+    const summaryBody = document.getElementById('summaryBody');
+    summaryBody.innerHTML = '';
+    capacityStats.forEach(stat => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>Wave ${stat.wave}</strong></td>
+        <td>${stat.department}</td>
+        <td>${stat.capacity}</td>
+        <td><strong>${stat.assigned}</strong></td>
+        <td>${stat.remaining}</td>
+      `;
+      summaryBody.appendChild(tr);
+    });
+
+    // 4. Render Section 2: Master Allocation Table
+    const masterBody = document.getElementById('masterBody');
+    masterBody.innerHTML = '';
     finalAllocation.forEach(s => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${s.rank}</td>
+        <td>Wave ${s.wave}</td>
+        <td>${s.waveRank}</td>
         <td>${s.id}</td>
         <td class="arabic-name">${s.name}</td>
         <td>${typeof s.gpa === 'number' ? s.gpa.toFixed(2) : s.gpa}</td>
         <td><strong>${s.assigned}</strong></td>
         <td>${s.choiceMatched}</td>
       `;
-      tbody.appendChild(tr);
+      masterBody.appendChild(tr);
     });
 
-    resultsTable.style.display = 'table';
-    exportBtn.style.display = 'inline-block';
-    status.textContent = `Allocation complete! Successfully processed ${students.length} students.`;
+    // 5. Render Section 3: Grouped Department Cards
+    renderDepartmentCards();
+
+    // Show sections
+    document.getElementById('summarySection').style.display = 'block';
+    document.getElementById('masterSection').style.display = 'block';
+    document.getElementById('departmentSection').style.display = 'block';
+    document.getElementById('exportBtn').style.display = 'inline-block';
+
+    status.textContent = `Allocation complete! Successfully assigned ${students.length} students across ${Object.keys(waveGroups).length} wave(s).`;
 
   } catch (error) {
     console.error('Allocation Error:', error);
-    status.textContent = 'Error fetching data from Google Sheets. Open browser console (F12) for details.';
+    status.textContent = 'Error processing allocation. Check browser console (F12) for details.';
   }
 }
 
-// Export allocation results to CSV (UTF-8 BOM supported for Arabic text)
+// Helper: Group students into Department Cards
+function renderDepartmentCards() {
+  const container = document.getElementById('departmentCardsContainer');
+  container.innerHTML = '';
+
+  const grouped = {};
+  finalAllocation.forEach(student => {
+    const dept = student.assigned;
+    if (!grouped[dept]) grouped[dept] = [];
+    grouped[dept].push(student);
+  });
+
+  Object.keys(grouped).forEach(deptName => {
+    const list = grouped[deptName];
+    const card = document.createElement('div');
+    card.className = 'dept-card';
+
+    let rowsHTML = '';
+    list.forEach((st, idx) => {
+      rowsHTML += `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>Wave ${st.wave}</td>
+          <td>${st.id}</td>
+          <td class="arabic-name">${st.name}</td>
+          <td>${typeof st.gpa === 'number' ? st.gpa.toFixed(2) : st.gpa}</td>
+          <td>${st.choiceMatched}</td>
+        </tr>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="dept-header">
+        <h4>${deptName}</h4>
+        <span class="badge">${list.length} Students Assigned</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Wave</th>
+            <th>ID</th>
+            <th style="text-align:right;">Student Name</th>
+            <th>GPA</th>
+            <th>Matched Choice</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHTML}
+        </tbody>
+      </table>
+    `;
+
+    container.appendChild(card);
+  });
+}
+
+// CSV Export logic
 function exportCSV() {
   if (finalAllocation.length === 0) return;
 
   let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-  csvContent += "Rank,Student ID,Name,GPA,Assigned Department,Choice Matched\n";
+  csvContent += "Wave,Wave Rank,Student ID,Name,GPA,Assigned Department,Choice Matched\n";
 
   finalAllocation.forEach(row => {
     const cleanName = row.name ? row.name.replace(/"/g, '""') : '';
-    csvContent += `"${row.rank}","${row.id}","${cleanName}","${row.gpa}","${row.assigned}","${row.choiceMatched}"\n`;
+    csvContent += `"${row.wave}","${row.waveRank}","${row.id}","${cleanName}","${row.gpa}","${row.assigned}","${row.choiceMatched}"\n`;
   });
 
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement("a");
   link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "department_allocation_results.csv");
+  link.setAttribute("download", "final_department_allocation.csv");
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
