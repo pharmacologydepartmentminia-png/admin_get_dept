@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Department Allocation Portal</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    .container {
+      max-width: 950px;
+      margin: auto;
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h2, h3 { color: #2c3e50; margin-top: 0; }
+    .capacity-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 25px;
+    }
+    .capacity-item {
+      background: #eef2f5;
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #dcdfe3;
+    }
+    .capacity-item label {
+      font-size: 13px;
+      font-weight: bold;
+      display: block;
+      margin-bottom: 6px;
+      color: #495057;
+    }
+    .capacity-item input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .btn-group {
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #28a745;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 5px;
+      margin-right: 10px;
+      transition: background-color 0.2s ease;
+    }
+    button:hover { background-color: #218838; }
+    .btn-export { background-color: #007bff; }
+    .btn-export:hover { background-color: #0056b3; }
+    #status {
+      font-weight: bold;
+      margin-top: 15px;
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: #e9ecef;
+      border-radius: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #dee2e6;
+      padding: 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #f1f3f5;
+      color: #333;
+    }
+    tr:nth-child(even) { background-color: #f8f9fa; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Admin Department Allocation Portal</h2>
+  
+  <h3>1. Set Department Capacity Limits</h3>
+  <div class="capacity-grid" id="capacityInputs"></div>
+
+  <div class="btn-group">
+    <button id="runBtn" onclick="runAllocation()">Run GPA Allocation</button>
+    <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export to CSV</button>
+  </div>
+
+  <h3>2. Final Allocation Results</h3>
+  <div id="status">Click "Run GPA Allocation" to process student choices from Google Sheets.</div>
+  
+  <table id="resultsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Student ID</th>
+        <th>Name</th>
+        <th>GPA</th>
+        <th>Assigned Department</th>
+        <th>Matched Choice</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+</div>
+
+<script>
+// Google Apps Script Web App URL
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyC0f5f1oVLCZeTUzp49ticE3yA0QiqDskrOY-knMLGIgVIf7tWEwxgtvnT__HDH-xfZA/exec';
+
+// The 8 Departments
+const DEPARTMENTS = [
+  "Medicinal chemistry",
+  "Pharmaceutics",
+  "Pharmacy practice",
+  "Microbiology",
+  "Pharmacognosy",
+  "Pharmacology",
+  "Biochemistry",
+  "Analytical chemistry"
+];
+
+let finalAllocation = [];
+
+// 1. Generate Capacity Inputs dynamically
+document.addEventListener('DOMContentLoaded', () => {
+  const capacityContainer = document.getElementById('capacityInputs');
+  capacityContainer.innerHTML = '';
+  
+  DEPARTMENTS.forEach(dept => {
+    const div = document.createElement('div');
+    div.className = 'capacity-item';
+    div.innerHTML = `
+      <label for="cap_${dept}">${dept}</label>
+      <input type="number" id="cap_${dept}" value="30" min="1">
+    `;
+    capacityContainer.appendChild(div);
+  });
+});
+
+// 2. Fetch data from Google Sheets, Sort by GPA, and Allocate Seats
+async function runAllocation() {
+  const status = document.getElementById('status');
+  const resultsTable = document.getElementById('resultsTable');
+  const exportBtn = document.getElementById('exportBtn');
+  
+  status.textContent = 'Fetching student data from Google Sheets...';
+
+  try {
+    const response = await fetch(SCRIPT_URL);
+    if (!response.ok) throw new Error('Network response was not ok');
+    
+    const data = await response.json();
+    let students = data.students || [];
+
+    if (students.length === 0) {
+      status.textContent = 'No student submissions found in the sheet.';
+      return;
+    }
+
+    // Read capacity numbers configured by Admin
+    const seatsLeft = {};
+    DEPARTMENTS.forEach(dept => {
+      const inputEl = document.getElementById(`cap_${dept}`);
+      const cap = inputEl ? parseInt(inputEl.value, 10) || 0 : 0;
+      seatsLeft[dept] = cap;
+    });
+
+    // Sort students by GPA descending (Highest GPA gets top priority)
+    students.sort((a, b) => b.gpa - a.gpa);
+
+    // Run Allocation Algorithm
+    finalAllocation = [];
+    students.forEach((student, index) => {
+      let assigned = 'Unassigned (Capacities Full)';
+      let choiceMatched = 'None';
+
+      if (Array.isArray(student.preferences)) {
+        for (let i = 0; i < student.preferences.length; i++) {
+          const pref = student.preferences[i];
+          if (seatsLeft[pref] !== undefined && seatsLeft[pref] > 0) {
+            assigned = pref;
+            choiceMatched = `Preference ${i + 1}`;
+            seatsLeft[pref]--; // Deduct 1 seat capacity
+            break;
+          }
+        }
+      }
+
+      finalAllocation.push({
+        rank: index + 1,
+        id: student.id,
+        name: student.name,
+        gpa: student.gpa,
+        assigned: assigned,
+        choiceMatched: choiceMatched
+      });
+    });
+
+    // Populate Results Table
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = '';
+    
+    finalAllocation.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${s.rank}</td>
+        <td>${s.id}</td>
+        <td>${s.name}</td>
+        <td>${typeof s.gpa === 'number' ? s.gpa.toFixed(2) : s.gpa}</td>
+        <td><strong>${s.assigned}</strong></td>
+        <td>${s.choiceMatched}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    resultsTable.style.display = 'table';
+    exportBtn.style.display = 'inline-block';
+    status.textContent = `Allocation complete! Successfully allocated ${students.length} students.`;
+
+  } catch (error) {
+    console.error('Allocation Error:', error);
+    status.textContent = 'Error fetching data from Google Sheets. Ensure your Apps Script Web App is deployed as "Anyone".';
+  }
+}
+
+// 3. Export Allocation to CSV
+function exportCSV() {
+  if (finalAllocation.length === 0) return;
+ 
+    <div class="btn-group">
+  <button id="runBtn" onclick="runAllocation()">Run GPA Allocation</button>
+  <button id="exportBtn" class="btn-export" onclick="exportCSV()" style="display:none;">Export to CSV</button>
+  <button id="saveSheetBtn" style="display:none; background-color: #6f42c1;" onclick="saveToSheet()">Save to Google Sheet</button>
+</div>
+
+  // UTF-8 BOM prefix ensures Arabic student names display correctly in Excel
+  let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+  csvContent += "Rank,Student ID,Name,GPA,Assigned Department,Choice Matched\n";
+
+  finalAllocation.forEach(row => {
+    const cleanName = row.name ? row.name.replace(/"/g, '""') : '';
+    csvContent += `"${row.rank}","${row.id}","${cleanName}","${row.gpa}","${row.assigned}","${row.choiceMatched}"\n`;
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "final_department_allocation.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+</script>
+
+</body>
+</html>
