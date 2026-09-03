@@ -98,6 +98,18 @@
                 html += '</table>';
                 div.innerHTML += html;
             }
+
+            // ADDED EXPORT FUNCTIONALITY:
+            div.innerHTML += `<button class="admin-btn" style="background-color: #276749; margin-top: 20px;" onclick="exportToExcel(${targetWave})">Export to Excel</button>`;
+        }
+
+        function exportToExcel(wave) {
+            const html = document.getElementById('results').innerHTML;
+            const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `Wave_${wave}_Allocations.xls`;
+            a.click();
         }
     </script>
 </body>
